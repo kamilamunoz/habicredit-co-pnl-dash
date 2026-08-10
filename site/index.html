@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Habi CO · P&L HabiCredit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="assets/casa_habi.png">
+<link rel="stylesheet" href="css/styles.css?v=2026-08-10-init">
+</head>
+<body>
+
+<!-- ============================================================ LOGIN GATE -->
+<div id="loginGate" class="login-gate">
+  <div class="login-card">
+    <img class="login-logo" src="assets/casa_habi.png" alt="habi">
+    <div class="login-eyebrow">CO · P&L HABICREDIT</div>
+    <h2>Acceso restringido</h2>
+    <p class="login-sub">Ingresa la contraseña para continuar.</p>
+    <form id="loginForm" autocomplete="off">
+      <input type="password" id="loginPwd" placeholder="Password" autocomplete="off" autofocus required>
+      <button type="submit">Entrar</button>
+    </form>
+    <div id="loginError" class="login-error" hidden>Contraseña incorrecta.</div>
+    <div class="login-foot">Uso interno · Finanzas Habi</div>
+  </div>
+</div>
+
+<!-- ============================================================ HEADER ==== -->
+<header class="topbar" hidden>
+  <div class="topbar-inner">
+    <div class="brand">
+      <img class="logo-img" src="assets/casa_habi.png" alt="habi">
+      <div>
+        <div class="eyebrow">CO · HABICREDIT</div>
+        <h1>P&L HabiCredit · Consolidado</h1>
+        <div class="sub" id="contextLabel">Cargando…</div>
+      </div>
+    </div>
+    <div class="asof">
+      <div class="ttl">DATA</div>
+      <div class="row"><span class="k">Rango</span><b id="rangoFechas">—</b></div>
+      <div class="row"><span class="k">Refresh</span><b id="refreshAt">—</b></div>
+      <div class="row"><span class="k">Currency</span><b>COP millones</b></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================ TABLA ==== -->
+<main class="tabla-wrap" hidden id="mainWrap">
+  <div class="controls">
+    <div class="control-group">
+      <label>Ventana</label>
+      <div class="segmented" id="rangoCtrl">
+        <button class="seg-btn" data-rango="6">Últimos 6</button>
+        <button class="seg-btn active" data-rango="all">Todos</button>
+      </div>
+    </div>
+    <div class="salarios-flag" id="salariosFlag" hidden>
+      Override manual de salarios activo (data/salarios_manual.csv)
+    </div>
+  </div>
+
+  <div class="tabla-scroll">
+    <table id="pnlTable">
+      <thead><tr id="pnlHead"></tr></thead>
+      <tbody id="pnlBody"></tbody>
+    </table>
+  </div>
+  <p class="footnote">
+    Valores en <b>millones de COP</b>. Cohorte: mes calendario.<br>
+    Fuente: <code>papyrus-delivery-data.corp_gov_global.pl_habicredit_colombia</code>.<br>
+    Consolidado de los 4 productos (MM Mortgages / Non-MM / Bancario / HC100).<br>
+    <span class="mtd-note">El mes en curso aparece con el sufijo <b>· MTD</b>.</span>
+  </p>
+</main>
+
+<script src="js/app.js?v=2026-08-10-init"></script>
+</body>
+</html>

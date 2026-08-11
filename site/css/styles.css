@@ -131,6 +131,21 @@ code, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
   border: 1px solid var(--border);
 }
 
+/* Dropdown de ciudad */
+.ciudad-select {
+  background: var(--panel); color: var(--text-strong);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 32px 6px 12px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%237B2CFF' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.ciudad-select:hover { border-color: var(--habi); }
+.ciudad-select:focus { border-color: var(--habi); box-shadow: 0 0 0 3px rgba(123, 44, 255, 0.15); }
+
 /* ─── tabla ─── */
 .tabla-scroll {
   background: var(--panel); border: 1px solid var(--border);

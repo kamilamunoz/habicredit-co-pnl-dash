@@ -1,6 +1,20 @@
-"""Orquestador: lee data/raw_pl_habicredit_co.parquet, arma la tabla mensual
-con las 15 líneas del P&L HabiCredit CO consolidado, aplica override manual
-opcional de salarios y escribe site/data/kpi_pnl.json.
+"""Orquestador: lee data/raw_habicredit_ciudad.parquet, arma la tabla mensual
+con las 8 líneas del P&L HabiCredit CO por ciudad (Total + ciudades reales) y
+escribe site/data/kpi_pnl.json.
+
+Estructura de 8 líneas:
+    1. Cantidad Desembolsos               (count)
+    2. Valor Desembolsado                 (monto COP)
+    3. Ticket Promedio                    (monto COP absoluto — NO millones)
+    4. Comisión Recibida                  (monto COP)
+    5. Comisión Pagada Externos           (monto COP)
+    6. Comisión Pagada Internos           (monto COP)
+    7. Comisión Neta = 4 − 5 − 6          (subtotal morado)
+    8. Margen Neto  = Comisión Neta       (subtotal morado)
+
+La fila `Total` se calcula como suma de las ciudades reales (Bogotá + Valle de
+Aburrá + Otros + cualquier otra que aparezca en el raw). Ticket Promedio del
+Total se RECALCULA: valor_total / cantidad_total (nunca suma).
 
 Uso:
     make refresh
@@ -28,96 +42,134 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RAW_PATH = REPO_ROOT / "data" / "raw_pl_habicredit_co.parquet"
-SALARIOS_MANUAL_PATH = REPO_ROOT / "data" / "salarios_manual.csv"
+RAW_PATH = REPO_ROOT / "data" / "raw_habicredit_ciudad.parquet"
 OUT_PATH = REPO_ROOT / "site" / "data" / "kpi_pnl.json"
 
-# Estructura de la tabla en el orden que Pau usa:
-#   type: 'row' (línea normal) | 'subtotal' (fondo morado)
-#   sign: 'count' | 'money' | 'ratio' — controla formato en el frontend
-#   key: identificador para el JSON (snake_case en español)
-#   kpi_source: nombre EXACTO en la tabla pl_habicredit_colombia
-#   pintar: True → subtotal morado
-#
-# Ojo con los espacios en los nombres source (la tabla los tiene tal cual).
-PNL_STRUCTURE = [
-    {"n": 1,  "key": "num_radicaciones",     "label": "Número Radicaciones",                     "type": "row",      "sign": "count",  "kpi_source": "Número Radicaciones"},
-    {"n": 2,  "key": "num_desembolsos",      "label": "Número Desembolsos",                      "type": "row",      "sign": "count",  "kpi_source": "Número Desembolsos"},
-    {"n": 3,  "key": "ticket_promedio",      "label": "Ticket Promedio",                         "type": "row",      "sign": "ratio",  "kpi_source": "Ticket Promedio"},
-    {"n": 4,  "key": "valor_desembolsos",    "label": "Valor Desembolsos",                       "type": "row",      "sign": "money",  "kpi_source": "Valor Desembolsos"},
-    {"n": 5,  "key": "comision_recibida_total", "label": "Comisión Recibida Total",              "type": "row",      "sign": "money",  "kpi_source": "Comisión Recibida Total"},
-    {"n": 6,  "key": "comision_recibida",    "label": "Comisión Recibida",                       "type": "row",      "sign": "money",  "kpi_source": "Comisión Recibida"},
-    {"n": 7,  "key": "comision_pagada_ext",  "label": "Comisión Pagada Externos",                "type": "row",      "sign": "money",  "kpi_source": "Comision Pagada Externos"},
-    {"n": 8,  "key": "comision_neta",        "label": "Comisión Neta",                           "type": "subtotal", "sign": "money",  "kpi_source": "Comisión Neta"},
-    {"n": 9,  "key": "subtotal_post_directos", "label": "Subtotal Margen Después de Costos Directos", "type": "subtotal", "sign": "money", "kpi_source": "Subtotal Margen Despues de Costos Directos"},
-    {"n": 10, "key": "subtotal_post_com",    "label": "Subtotal (margen − gastos comerciales)",  "type": "subtotal", "sign": "money",  "kpi_source": "Subtotal (margen - gastos comerciales)"},
-    {"n": 11, "key": "salarios_comercial",   "label": "Salarios equipo comercial y operativo",   "type": "row",      "sign": "money",  "kpi_source": "Salarios equipo comercial y operativo "},
-    {"n": 12, "key": "subtotal_post_sal_op", "label": "Sub Total (margen − salarios operativos)", "type": "subtotal", "sign": "money", "kpi_source": "Sub Total (margen - salarios operativos)"},
-    {"n": 13, "key": "salarios_admin",       "label": "Salarios equipo administrativo",          "type": "row",      "sign": "money",  "kpi_source": "Salarios equipo administrativo"},
-    {"n": 14, "key": "subtotal_post_sal_infra", "label": "Subtotal (margen − salarios infra)",   "type": "subtotal", "sign": "money",  "kpi_source": "Subtotal (margen - salarios infra)"},
-    {"n": 15, "key": "margen_neto",          "label": "Margen Neto",                             "type": "subtotal", "sign": "money",  "kpi_source": "Margen Neto"},
-]
+# Orden preferido de ciudades en el dropdown. Cualquier otra ciudad que salga
+# del raw se anexa al final en orden alfabético.
+CIUDAD_ORDER = ["Bogotá", "Valle de Aburrá", "Barranquilla", "Cali", "Otros"]
 
-# KPIs cuyo valor "total mes" es la SUMA de todas las filas del mes con ese kpi
-# (típicamente los desembolsos por banco). Los subtotales precalculados vienen
-# como fila única, no requieren agregación.
-SUMMABLE_KPIS = {
-    "Número Radicaciones",
-    "Número Desembolsos",
-    "Ticket Promedio",
-    "Valor Desembolsos",
-    "Comisión Recibida Total",
-    "Comisión Recibida",
-    "Comision Pagada Externos",
-    "Salarios equipo comercial y operativo ",
-    "Salarios equipo administrativo",
+# Normalización de ciudades a la nomenclatura canónica del dashboard.
+#   - 'Bogotá D.C.' llega del CTE ciudad_broker sin normalizar (el CASE solo
+#     cubre 'Medellín' y 'Ibagué'); es la MISMA ciudad que 'Bogotá'.
+CIUDAD_NORMALIZE = {
+    "Bogotá D.C.": "Bogotá",
+    "bogotá d.c.": "Bogotá",
+    "BOGOTÁ D.C.": "Bogotá",
 }
 
-# Para líneas de tipo ratio (Ticket Promedio) NO queremos sumar — usamos la
-# fila total (con descripcion IS NULL AND detalle IS NULL). Si no existe, la
-# recalculamos como Valor Desembolsos / Número Desembolsos.
-RATIO_KPIS = {"Ticket Promedio"}
+# Basura conocida en el campo `ciudad` de dim_brokers (valores literales '1','2','3'
+# capturados en el formulario). Se descartan.
+CIUDAD_DESCARTAR = {"1", "2", "3"}
+
+# Rango temporal válido. Si aparece un mes fuera (p.ej. '2925-11-01' por typo en
+# fecha_desembolso), se filtra.
+MES_MIN = "2024-01"
+MES_MAX_HARD = "2027-12"
+
+# Mapeo KPI del raw → key del JSON
+KPI_SOURCE_TO_KEY = {
+    "Cantidad Desembolsos": "cant_desembolsos",
+    "Valor Desembolsado": "valor_desembolsado",
+    "Ticket Promedio": "ticket_promedio",
+    "Comisión Recibida": "comision_recibida",
+    "Comisión Pagada Externos": "comision_externos",
+    "Comisión Pagada Internos": "comision_internos",
+}
+
+# Estructura de las 8 líneas para el frontend.
+#   tipo: 'count' → entero (# desembolsos)
+#         'monto' → COP (frontend divide por 1e6 salvo ticket_promedio)
+#   subtotal: True → fondo morado
+KPIS_STRUCTURE = [
+    {"key": "cant_desembolsos",   "label": "Cantidad Desembolsos",     "tipo": "count", "subtotal": False},
+    {"key": "valor_desembolsado", "label": "Valor Desembolsado",       "tipo": "monto", "subtotal": False},
+    {"key": "ticket_promedio",    "label": "Ticket Promedio",          "tipo": "monto", "subtotal": False},
+    {"key": "comision_recibida",  "label": "Comisión Recibida",        "tipo": "monto", "subtotal": False},
+    {"key": "comision_externos",  "label": "Comisión Pagada Externos", "tipo": "monto", "subtotal": False},
+    {"key": "comision_internos",  "label": "Comisión Pagada Internos", "tipo": "monto", "subtotal": False},
+    {"key": "comision_neta",      "label": "Comisión Neta",            "tipo": "monto", "subtotal": True},
+    {"key": "margen_neto",        "label": "Margen Neto",              "tipo": "monto", "subtotal": True},
+]
 
 
-def _total_per_month(df: pd.DataFrame, kpi: str) -> pd.Series:
-    """Devuelve una Series indexada por mes (YYYY-MM) con el valor total para el kpi."""
-    sub = df.loc[df["kpi"] == kpi].copy()
-    if sub.empty:
-        return pd.Series(dtype=float)
-
-    if kpi in RATIO_KPIS:
-        # Preferimos la fila con descripcion IS NULL AND detalle IS NULL.
-        totals = sub.loc[sub["descripcion"].isna() & sub["detalle"].isna()].copy()
-        if not totals.empty:
-            return totals.groupby("mes")["valor"].first()
-
-    if kpi in SUMMABLE_KPIS:
-        # Fallback: sumar todas las filas del mes (para el total real).
-        # Pero preferimos la fila total si existe (más consistente con Pau).
-        totals = sub.loc[sub["descripcion"].isna() & sub["detalle"].isna()].copy()
-        if not totals.empty:
-            return totals.groupby("mes")["valor"].first()
-        return sub.groupby("mes")["valor"].sum()
-
-    # Subtotales precalculados: fila única por mes.
-    return sub.groupby("mes")["valor"].first()
+def _ordered_ciudades(ciudades_raw: list[str]) -> list[str]:
+    """Ordena las ciudades del raw usando CIUDAD_ORDER como prioridad."""
+    ordered = [c for c in CIUDAD_ORDER if c in ciudades_raw]
+    extras = sorted([c for c in ciudades_raw if c not in CIUDAD_ORDER])
+    return ordered + extras
 
 
-def _load_salarios_override() -> dict | None:
-    """Lee data/salarios_manual.csv si existe. Devuelve {mes: {comercial, admin}}."""
-    if not SALARIOS_MANUAL_PATH.exists():
-        return None
-    log.info("Encontrado override manual de salarios: %s", SALARIOS_MANUAL_PATH)
-    csv = pd.read_csv(SALARIOS_MANUAL_PATH)
-    csv["mes"] = csv["mes"].astype(str)  # esperamos "YYYY-MM"
-    out = {}
-    for _, row in csv.iterrows():
-        out[row["mes"]] = {
-            "comercial": float(row.get("salarios_comercial", 0) or 0),
-            "admin": float(row.get("salarios_admin", 0) or 0),
-        }
-    log.info("Override de salarios cargado para %d meses", len(out))
+def _build_ciudad_month_values(
+    raw: pd.DataFrame, ciudad: str, meses: list[str]
+) -> dict[str, dict[str, float | None]]:
+    """Devuelve {mes → {key → valor}} para una ciudad específica (los 6 KPIs base
+    del raw, sin calcular subtotales aún)."""
+    out: dict[str, dict[str, float | None]] = {m: {} for m in meses}
+    sub = raw.loc[raw["ciudad"] == ciudad]
+    for m in meses:
+        row = sub.loc[sub["mes"] == m]
+        for kpi_src, key in KPI_SOURCE_TO_KEY.items():
+            match = row.loc[row["kpi"] == kpi_src, "valor"]
+            v = float(match.iloc[0]) if len(match) else None
+            if v is not None and pd.isna(v):
+                v = None
+            out[m][key] = v
     return out
+
+
+def _finalize_values(
+    values: dict[str, dict[str, float | None]],
+) -> dict[str, dict[str, float | None]]:
+    """Agrega comision_neta y margen_neto a cada mes."""
+    for m, kv in values.items():
+        cr = kv.get("comision_recibida")
+        ce = kv.get("comision_externos")
+        ci = kv.get("comision_internos")
+        parts = [x for x in (cr, ce, ci) if x is not None]
+        if not parts:
+            kv["comision_neta"] = None
+            kv["margen_neto"] = None
+        else:
+            neta = (cr or 0.0) - (ce or 0.0) - (ci or 0.0)
+            kv["comision_neta"] = neta
+            kv["margen_neto"] = neta
+    return values
+
+
+def _sum_or_none(vals: list[float | None]) -> float | None:
+    clean = [v for v in vals if v is not None]
+    if not clean:
+        return None
+    return float(sum(clean))
+
+
+def _build_total(
+    per_city: dict[str, dict[str, dict[str, float | None]]], meses: list[str]
+) -> dict[str, dict[str, float | None]]:
+    """Consolida el Total sumando ciudades reales. Ticket Promedio se recalcula
+    como valor_desembolsado_total / cant_desembolsos_total."""
+    total: dict[str, dict[str, float | None]] = {}
+    for m in meses:
+        kv: dict[str, float | None] = {}
+        # KPIs que se SUMAN
+        for key in [
+            "cant_desembolsos",
+            "valor_desembolsado",
+            "comision_recibida",
+            "comision_externos",
+            "comision_internos",
+        ]:
+            kv[key] = _sum_or_none([per_city[c][m].get(key) for c in per_city])
+        # Ticket promedio: recalcular
+        vd = kv.get("valor_desembolsado")
+        nd = kv.get("cant_desembolsos")
+        if vd is not None and nd not in (None, 0):
+            kv["ticket_promedio"] = vd / nd
+        else:
+            kv["ticket_promedio"] = None
+        total[m] = kv
+    return _finalize_values(total)
 
 
 def main() -> None:
@@ -130,79 +182,91 @@ def main() -> None:
 
     # normalizar mes a YYYY-MM string
     raw["mes"] = pd.to_datetime(raw["mes"]).dt.strftime("%Y-%m")
+    # normalizar ciudad (NaN → 'Bogotá' como fallback, ya lo hace el SQL pero
+    # cinturón y tirantes)
+    raw["ciudad"] = raw["ciudad"].fillna("Bogotá")
+    # aplicar mapeo de nomenclatura canónica (Bogotá D.C. → Bogotá)
+    raw["ciudad"] = raw["ciudad"].replace(CIUDAD_NORMALIZE)
+
+    # descartar basura del campo `ciudad` en dim_brokers ('1','2','3')
+    antes = len(raw)
+    raw = raw.loc[~raw["ciudad"].isin(CIUDAD_DESCARTAR)].copy()
+    if antes != len(raw):
+        log.info("Descartadas %d filas de ciudades basura {'1','2','3'}", antes - len(raw))
+
+    # filtrar rango temporal válido (bloquea typos tipo '2925-11')
+    antes = len(raw)
+    raw = raw.loc[(raw["mes"] >= MES_MIN) & (raw["mes"] <= MES_MAX_HARD)].copy()
+    if antes != len(raw):
+        log.info("Descartadas %d filas fuera de rango [%s..%s]",
+                 antes - len(raw), MES_MIN, MES_MAX_HARD)
+
+    # Reagregar tras normalización de ciudades: si 'Bogotá' y 'Bogotá D.C.' quedaron
+    # ambos como 'Bogotá', sumar por (mes, ciudad, kpi). Para 'Ticket Promedio'
+    # la suma NO es correcta — se recalcula después como valor/cant al construir
+    # per_city (se sobreescribe cualquier valor sumado con el correcto ahí).
+    raw = raw.groupby(["mes", "ciudad", "kpi"], as_index=False)["valor"].sum()
 
     mes_cutoff = os.environ.get("MES_CUTOFF", "").strip()
     if mes_cutoff:
         antes = len(raw)
         raw = raw.loc[raw["mes"] <= mes_cutoff].copy()
-        log.info("Cutoff %s aplicado: %d filas (excluidas %d)", mes_cutoff, len(raw), antes - len(raw))
+        log.info(
+            "Cutoff %s aplicado: %d filas (excluidas %d)",
+            mes_cutoff, len(raw), antes - len(raw),
+        )
 
-    # meses disponibles ordenados
     meses = sorted(raw["mes"].unique().tolist())
+    if not meses:
+        raise SystemExit("Raw quedó vacío tras el cutoff.")
     log.info("Meses en raw: %d (%s → %s)", len(meses), meses[0], meses[-1])
 
-    # override manual de salarios (opcional)
-    salarios_override = _load_salarios_override()
+    ciudades_raw = sorted(raw["ciudad"].dropna().unique().tolist())
+    ciudades_real = _ordered_ciudades(ciudades_raw)
+    log.info("Ciudades reales detectadas: %s", ciudades_real)
 
-    # Construir la tabla: {mes → {key → valor}}
-    values_per_month: dict[str, dict[str, float]] = {m: {} for m in meses}
-
-    for line in PNL_STRUCTURE:
-        series = _total_per_month(raw, line["kpi_source"])
+    # Values por ciudad (6 KPIs base + subtotales)
+    per_city: dict[str, dict[str, dict[str, float | None]]] = {}
+    for c in ciudades_real:
+        vals = _build_ciudad_month_values(raw, c, meses)
+        # Recalcular Ticket Promedio = Valor Desembolsado / Cantidad Desembolsos
+        # para blindar contra sumas incorrectas tras la reagrupación por
+        # normalización de ciudades (Bogotá D.C. → Bogotá).
         for m in meses:
-            v = series.get(m, None)
-            if v is None or pd.isna(v):
-                # Fallback Ticket Promedio si no hay fila total
-                if line["key"] == "ticket_promedio":
-                    vd = _total_per_month(raw, "Valor Desembolsos").get(m)
-                    nd = _total_per_month(raw, "Número Desembolsos").get(m)
-                    if vd and nd:
-                        v = float(vd) / float(nd)
-                    else:
-                        v = None
-            values_per_month[m][line["key"]] = None if v is None else float(v)
+            vd = vals[m].get("valor_desembolsado")
+            nd = vals[m].get("cant_desembolsos")
+            if vd is not None and nd not in (None, 0):
+                vals[m]["ticket_promedio"] = vd / nd
+            else:
+                vals[m]["ticket_promedio"] = None
+        vals = _finalize_values(vals)
+        per_city[c] = vals
 
-    # aplicar override de salarios y recalcular subtotales dependientes
-    if salarios_override:
-        for m, ov in salarios_override.items():
-            if m not in values_per_month:
-                continue
-            values_per_month[m]["salarios_comercial"] = ov["comercial"]
-            values_per_month[m]["salarios_admin"] = ov["admin"]
-            # recalcular subtotales downstream:
-            #   subtotal_post_sal_op = subtotal_post_com − salarios_comercial
-            #   subtotal_post_sal_infra = subtotal_post_sal_op − salarios_admin
-            #   margen_neto = subtotal_post_sal_infra
-            base = values_per_month[m].get("subtotal_post_com")
-            if base is not None:
-                s_op = base - ov["comercial"]
-                values_per_month[m]["subtotal_post_sal_op"] = s_op
-                s_infra = s_op - ov["admin"]
-                values_per_month[m]["subtotal_post_sal_infra"] = s_infra
-                values_per_month[m]["margen_neto"] = s_infra
-            log.info("Override aplicado para %s: comercial=%s, admin=%s", m, ov["comercial"], ov["admin"])
+    # Total consolidado
+    total = _build_total(per_city, meses)
 
-    # Estructura para el frontend (solo campos que usa el JS)
-    estructura = [
-        {"n": r["n"], "key": r["key"], "label": r["label"], "type": r["type"], "sign": r["sign"]}
-        for r in PNL_STRUCTURE
-    ]
+    # Ciudad list final: Total primero, luego ciudades reales
+    ciudades_output = ["Total"] + ciudades_real
+
+    data_out: dict[str, dict[str, dict[str, float | None]]] = {"Total": total}
+    for c in ciudades_real:
+        data_out[c] = per_city[c]
 
     payload = {
         "meta": {
-            "generado_en": datetime.now().isoformat(timespec="seconds"),
-            "tabla_fuente": "papyrus-delivery-data.corp_gov_global.pl_habicredit_colombia",
-            "cohorte": "mes (primer día del mes calendario)",
-            "currency": "COP",
-            "unidad": "unidades absolutas (el frontend divide por 1_000_000 para mostrar en millones)",
-            "consolidado": "MM Mortgages + Non-MM + Bancario + HC100 (los 4 productos ya vienen consolidados en la tabla)",
-            "salarios_override_activo": bool(salarios_override),
-            "filas_raw": int(len(raw)),
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "cutoff": mes_cutoff or None,
+            "mtd_month": meses[-1],
             "rango_meses": {"min": meses[0], "max": meses[-1]},
+            "currency": "COP",
+            "unidad": "unidades absolutas (frontend divide monto por 1e6 excepto ticket_promedio)",
+            "fuente": "query oficial Pau — cross-project papyrus-master + papyrus-delivery-data",
+            "ciudades_reales": ciudades_real,
         },
-        "estructura": estructura,
+        "ciudades": ciudades_output,
+        "kpis": KPIS_STRUCTURE,
         "meses": meses,
-        "valores": values_per_month,
+        "data": data_out,
     }
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -210,6 +274,19 @@ def main() -> None:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
 
     log.info("Escrito → %s (%.1f KB)", OUT_PATH, OUT_PATH.stat().st_size / 1024)
+
+    # Sanity log del último mes por ciudad
+    last = meses[-1]
+    log.info("--- Sanity check %s ---", last)
+    for c in ciudades_output:
+        kv = data_out[c][last]
+        log.info(
+            "  %-16s cant=%s valor=%s neta=%s",
+            c,
+            kv.get("cant_desembolsos"),
+            kv.get("valor_desembolsado"),
+            kv.get("comision_neta"),
+        )
 
 
 if __name__ == "__main__":

@@ -15,12 +15,10 @@ import logging
 import pandas as pd
 from google.cloud import bigquery
 
-# La tabla `pl_habicredit_colombia` vive en papyrus-delivery-data. Kamila
-# ya tiene bigquery.jobs.create ahí. Igual dejamos BILLING_PROJECT explícito
-# para consistencia con los otros dashboards (por si algún día la tabla se
-# mueve a clients-domain-data-master).
+# Billing project. Kamila tiene bigquery.jobs.create en papyrus-delivery-data.
+# El query oficial que Pau usa toca varias tablas cross-project (papyrus-master,
+# papyrus-delivery-data). Se factura en papyrus-delivery-data.
 BILLING_PROJECT = "papyrus-delivery-data"
-TABLE_PL_HBC_CO = "papyrus-delivery-data.corp_gov_global.pl_habicredit_colombia"
 
 log = logging.getLogger(__name__)
 

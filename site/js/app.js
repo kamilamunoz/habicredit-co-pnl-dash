@@ -1,14 +1,20 @@
 // habicredit-co-pnl-dash — frontend.
 // Vanilla JS, sin frameworks. Kamila mantiene sola.
 //
-// SALARIOS OVERRIDE:
-//   Si Kamila necesita reemplazar los salarios de la tabla, crea el archivo
-//   data/salarios_manual.csv en el repo (NO en site/data — el CSV lo lee el
-//   refresh_data.py en Python) con columnas:
-//       mes,salarios_comercial,salarios_admin
-//       2026-03,5712605373,769825452
-//   Y corre `make refresh` de nuevo. El JS no toca ese archivo; solo lee el
-//   JSON ya recalculado.
+// Estructura del JSON `data/kpi_pnl.json`:
+//   {
+//     meta: { generated_at, mtd_month, rango_meses, currency, fuente, ... },
+//     ciudades: ['Total', 'Bogotá', 'Valle de Aburrá', ...],
+//     kpis: [ {key, label, tipo, subtotal}, ... ]   // 8 líneas
+//     meses: ['YYYY-MM', ...],
+//     data: { <ciudad>: { <mes>: { <kpi_key>: valor|null, ... } } }
+//   }
+//
+// tipo:
+//   'count' → entero (# desembolsos)
+//   'monto' → COP absoluto. El frontend divide por 1e6 (COP MM) salvo
+//             ticket_promedio, que se muestra en COP absolutos con separador
+//             de miles y sin decimales.
 
 const PASSWORD = 'p&L_HbC*C0l*C12d4d';
 const STORAGE_KEY = 'habicredit-co-pnl-auth';
@@ -16,17 +22,8 @@ const STORAGE_KEY = 'habicredit-co-pnl-auth';
 const state = {
   data: null,          // kpi_pnl.json
   rango: 'all',        // '6' | 'all'
+  ciudad: 'Total',
 };
-
-// keys de subtotales (fila morada) — deben coincidir con estructura del JSON
-const SUBTOTAL_KEYS = new Set([
-  'comision_neta',
-  'subtotal_post_directos',
-  'subtotal_post_com',
-  'subtotal_post_sal_op',
-  'subtotal_post_sal_infra',
-  'margen_neto',
-]);
 
 // ─── login ──────────────────────────────────────────────────────────
 function unlockUI() {
@@ -66,19 +63,36 @@ async function loadData() {
 function renderHeader() {
   const m = state.data.meta;
   document.getElementById('contextLabel').textContent =
-    `${m.consolidado || 'HabiCredit CO'}`;
+    'HabiCredit CO · P&L por ciudad';
   document.getElementById('rangoFechas').textContent =
     `${m.rango_meses.min} → ${m.rango_meses.max}`;
-  const dt = new Date(m.generado_en);
+  const dt = new Date(m.generated_at);
   document.getElementById('refreshAt').textContent =
     dt.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+}
 
-  // Flag si hay override manual de salarios
-  document.getElementById('salariosFlag').hidden = !m.salarios_override_activo;
+function renderCiudadLabel() {
+  document.getElementById('ciudadLabel').textContent = state.ciudad;
 }
 
 // ─── controls ───────────────────────────────────────────────────────
 function setupControls() {
+  // Dropdown ciudades
+  const sel = document.getElementById('ciudadSelector');
+  sel.innerHTML = '';
+  for (const c of state.data.ciudades) {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  }
+  sel.value = state.ciudad;
+  sel.addEventListener('change', () => {
+    state.ciudad = sel.value;
+    renderCiudadLabel();
+    renderTable();
+  });
+
   document.querySelectorAll('#rangoCtrl .seg-btn').forEach(b => {
     b.addEventListener('click', () => {
       state.rango = b.dataset.rango;
@@ -97,44 +111,47 @@ function mesesToShow() {
   return all.slice(-n);
 }
 
-// Determina cuál mes es "MTD" (el mes calendario en curso HOY).
+// MTD = mes más reciente en el JSON (viene del backend en meta.mtd_month).
+// Si por alguna razón no está, cae al último de la lista.
 function currentMesMTD() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
+  return state.data.meta.mtd_month || state.data.meses[state.data.meses.length - 1];
 }
 
-function fmtMoney(v) {
+// Formato en millones de COP (2 decimales, separador de miles es-CO).
+function fmtMonto(v) {
   if (v === null || v === undefined || !isFinite(v)) return '—';
   const inMM = v / 1_000_000;
-  return inMM.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return inMM.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Ticket Promedio: COP absoluto con separador de miles, sin decimales.
+function fmtTicket(v) {
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  return Math.round(v).toLocaleString('es-CO');
+}
+
+// Cantidad Desembolsos: entero.
 function fmtCount(v) {
   if (v === null || v === undefined || !isFinite(v)) return '—';
   return Math.round(v).toLocaleString('es-CO');
 }
 
-function fmtRatio(v) {
-  // Ticket promedio en COP MM (no en cientos de millones)
-  return fmtMoney(v);
-}
-
-function fmtCell(v, sign) {
-  if (sign === 'count') return fmtCount(v);
-  if (sign === 'ratio') return fmtRatio(v);
-  return fmtMoney(v);
+function fmtByKey(v, key, tipo) {
+  if (tipo === 'count') return fmtCount(v);
+  if (key === 'ticket_promedio') return fmtTicket(v);
+  return fmtMonto(v);
 }
 
 function renderTable() {
   const meses = mesesToShow();
   const mtd = currentMesMTD();
+  const ciudad = state.ciudad;
+  const dataCiudad = state.data.data[ciudad] || {};
 
   const head = document.getElementById('pnlHead');
   head.innerHTML = '';
   const firstTh = document.createElement('th');
-  firstTh.textContent = 'P&L HabiCredit CO (COP MM)';
+  firstTh.textContent = `P&L HabiCredit CO · ${ciudad}`;
   head.appendChild(firstTh);
   for (const m of meses) {
     const th = document.createElement('th');
@@ -146,24 +163,24 @@ function renderTable() {
   const body = document.getElementById('pnlBody');
   body.innerHTML = '';
 
-  for (const line of state.data.estructura) {
+  for (const line of state.data.kpis) {
     const tr = document.createElement('tr');
-    if (line.type === 'subtotal') tr.classList.add('subtotal');
+    if (line.subtotal) tr.classList.add('subtotal');
     if (line.key === 'margen_neto') tr.classList.add('margen-neto');
 
     const tdLabel = document.createElement('td');
-    tdLabel.textContent = `${line.n}. ${line.label}`;
+    tdLabel.textContent = line.label;
     tr.appendChild(tdLabel);
 
     for (const m of meses) {
-      const monthVals = state.data.valores[m] || {};
-      const v = monthVals[line.key];
+      const kv = dataCiudad[m] || {};
+      const v = kv[line.key];
       const td = document.createElement('td');
       if (v === null || v === undefined) {
         td.textContent = '—';
         td.classList.add('placeholder');
       } else {
-        td.textContent = fmtCell(v, line.sign);
+        td.textContent = fmtByKey(v, line.key, line.tipo);
       }
       tr.appendChild(td);
     }
@@ -174,7 +191,10 @@ function renderTable() {
 // ─── init ───────────────────────────────────────────────────────────
 async function init() {
   await loadData();
+  // Ciudad default: la primera del array (Total)
+  state.ciudad = state.data.ciudades[0] || 'Total';
   renderHeader();
+  renderCiudadLabel();
   setupControls();
   renderTable();
 }

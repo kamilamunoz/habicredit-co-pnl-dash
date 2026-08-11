@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="assets/casa_habi.png">
-<link rel="stylesheet" href="css/styles.css?v=2026-08-10-init">
+<link rel="stylesheet" href="css/styles.css?v=2026-08-11-ciudad">
 </head>
 <body>
 
@@ -35,7 +35,7 @@
       <img class="logo-img" src="assets/casa_habi.png" alt="habi">
       <div>
         <div class="eyebrow">CO · HABICREDIT</div>
-        <h1>P&L HabiCredit · Consolidado</h1>
+        <h1>P&L HabiCredit · <span id="ciudadLabel">Total</span></h1>
         <div class="sub" id="contextLabel">Cargando…</div>
       </div>
     </div>
@@ -52,14 +52,15 @@
 <main class="tabla-wrap" hidden id="mainWrap">
   <div class="controls">
     <div class="control-group">
+      <label>Ciudad</label>
+      <select id="ciudadSelector" class="ciudad-select"></select>
+    </div>
+    <div class="control-group">
       <label>Ventana</label>
       <div class="segmented" id="rangoCtrl">
         <button class="seg-btn" data-rango="6">Últimos 6</button>
         <button class="seg-btn active" data-rango="all">Todos</button>
       </div>
-    </div>
-    <div class="salarios-flag" id="salariosFlag" hidden>
-      Override manual de salarios activo (data/salarios_manual.csv)
     </div>
   </div>
 
@@ -70,13 +71,13 @@
     </table>
   </div>
   <p class="footnote">
-    Valores en <b>millones de COP</b>. Cohorte: mes calendario.<br>
-    Fuente: <code>papyrus-delivery-data.corp_gov_global.pl_habicredit_colombia</code>.<br>
-    Consolidado de los 4 productos (MM Mortgages / Non-MM / Bancario / HC100).<br>
+    Montos en <b>millones de COP</b>. Ticket Promedio en <b>COP absolutos</b>. Cantidad Desembolsos en unidades.<br>
+    Fuente: query oficial cross-project (<code>papyrus-master</code> + <code>papyrus-delivery-data</code>) con tablas espejo <code>cs_tarifa_comisiones_habicredit</code> y <code>cs_comisiones_internas_hc_finanzas</code>.<br>
+    El <b>Total</b> es la suma de las ciudades reales; Ticket Promedio del Total se recalcula = valor_total / cantidad_total.<br>
     <span class="mtd-note">El mes en curso aparece con el sufijo <b>· MTD</b>.</span>
   </p>
 </main>
 
-<script src="js/app.js?v=2026-08-10-init"></script>
+<script src="js/app.js?v=2026-08-11-ciudad"></script>
 </body>
 </html>

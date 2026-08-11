@@ -2,15 +2,14 @@
 con las 8 líneas del P&L HabiCredit CO por ciudad (Total + ciudades reales) y
 escribe site/data/kpi_pnl.json.
 
-Estructura de 8 líneas:
+Estructura de 7 líneas:
     1. Cantidad Desembolsos               (count)
     2. Valor Desembolsado                 (monto COP)
-    3. Ticket Promedio                    (monto COP absoluto — NO millones)
+    3. Ticket Promedio                    (monto COP, mostrado en MM como los demás)
     4. Comisión Recibida                  (monto COP)
     5. Comisión Pagada Externos           (monto COP)
     6. Comisión Pagada Internos           (monto COP)
-    7. Comisión Neta = 4 − 5 − 6          (subtotal morado)
-    8. Margen Neto  = Comisión Neta       (subtotal morado)
+    7. Margen de Contribución = 4 − 5 − 6 (subtotal morado)
 
 La fila `Total` se calcula como suma de las ciudades reales (Bogotá + Valle de
 Aburrá + Otros + cualquier otra que aparezca en el raw). Ticket Promedio del
@@ -88,8 +87,7 @@ KPIS_STRUCTURE = [
     {"key": "comision_recibida",  "label": "Comisión Recibida",        "tipo": "monto", "subtotal": False},
     {"key": "comision_externos",  "label": "Comisión Pagada Externos", "tipo": "monto", "subtotal": False},
     {"key": "comision_internos",  "label": "Comisión Pagada Internos", "tipo": "monto", "subtotal": False},
-    {"key": "comision_neta",      "label": "Comisión Neta",            "tipo": "monto", "subtotal": True},
-    {"key": "margen_neto",        "label": "Margen Neto",              "tipo": "monto", "subtotal": True},
+    {"key": "margen_neto",        "label": "Margen de Contribución",   "tipo": "monto", "subtotal": True},
 ]
 
 
@@ -121,19 +119,19 @@ def _build_ciudad_month_values(
 def _finalize_values(
     values: dict[str, dict[str, float | None]],
 ) -> dict[str, dict[str, float | None]]:
-    """Agrega comision_neta y margen_neto a cada mes."""
+    """Agrega margen_neto (= Margen de Contribución) a cada mes.
+
+    Margen de Contribución = Comisión Recibida − Externos − Internos.
+    """
     for m, kv in values.items():
         cr = kv.get("comision_recibida")
         ce = kv.get("comision_externos")
         ci = kv.get("comision_internos")
         parts = [x for x in (cr, ce, ci) if x is not None]
         if not parts:
-            kv["comision_neta"] = None
             kv["margen_neto"] = None
         else:
-            neta = (cr or 0.0) - (ce or 0.0) - (ci or 0.0)
-            kv["comision_neta"] = neta
-            kv["margen_neto"] = neta
+            kv["margen_neto"] = (cr or 0.0) - (ce or 0.0) - (ci or 0.0)
     return values
 
 
@@ -245,6 +243,26 @@ def main() -> None:
     # Total consolidado
     total = _build_total(per_city, meses)
 
+    # Mes en curso (MTD): NULLear comisiones y Neta.
+    # Motivo: el BET (fuente de las comisiones) reconoce el ingreso/costo cuando
+    # cae el bill contable, que se emite T+1 respecto al desembolso. En el mes
+    # en curso el BET siempre está incompleto — mostrar las cifras parciales
+    # crea la ilusión de una Neta negativa que se corregirá al cerrar el ciclo.
+    # Los datos operativos (Cant, Valor, Ticket) sí se mantienen — son reales.
+    mtd = meses[-1]
+    _COMISION_KEYS_MTD = (
+        "comision_recibida",
+        "comision_externos",
+        "comision_internos",
+        "margen_neto",
+    )
+    for c in ciudades_real:
+        for k in _COMISION_KEYS_MTD:
+            per_city[c][mtd][k] = None
+    for k in _COMISION_KEYS_MTD:
+        total[mtd][k] = None
+    log.info("MTD %s: comisiones/neta forzadas a NULL (BET incompleto por T+1)", mtd)
+
     # Ciudad list final: Total primero, luego ciudades reales
     ciudades_output = ["Total"] + ciudades_real
 
@@ -281,11 +299,11 @@ def main() -> None:
     for c in ciudades_output:
         kv = data_out[c][last]
         log.info(
-            "  %-16s cant=%s valor=%s neta=%s",
+            "  %-16s cant=%s valor=%s margen=%s",
             c,
             kv.get("cant_desembolsos"),
             kv.get("valor_desembolsado"),
-            kv.get("comision_neta"),
+            kv.get("margen_neto"),
         )
 
 

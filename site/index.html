@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="assets/casa_habi.png">
-<link rel="stylesheet" href="css/styles.css?v=2026-08-11-ciudad">
+<link rel="stylesheet" href="css/styles.css?v=2026-08-11-cmp">
 </head>
 <body>
 
@@ -48,18 +48,47 @@
   </div>
 </header>
 
-<!-- ============================================================ TABLA ==== -->
-<main class="tabla-wrap" hidden id="mainWrap">
+<!-- ============================================================ TABS ====== -->
+<nav class="tabs" hidden id="tabsNav">
+  <div class="tabs-inner">
+    <button class="tab-btn active" data-tab="pnl">P&L por ciudad</button>
+    <button class="tab-btn" data-tab="comparativa">Comparativa entre regiones</button>
+  </div>
+</nav>
+
+<!-- ============================================================ TAB PNL === -->
+<section id="tab-pnl" class="tab-panel" hidden>
+<main class="tabla-wrap">
   <div class="controls">
     <div class="control-group">
       <label>Ciudad</label>
       <select id="ciudadSelector" class="ciudad-select"></select>
     </div>
     <div class="control-group">
-      <label>Ventana</label>
+      <label>Meses a mostrar</label>
       <div class="segmented" id="rangoCtrl">
         <button class="seg-btn" data-rango="6">Últimos 6</button>
-        <button class="seg-btn active" data-rango="all">Todos</button>
+        <button class="seg-btn active" data-rango="12">Últimos 12</button>
+        <button class="seg-btn" data-rango="all">Todos</button>
+        <button class="seg-btn" data-rango="year">Por año</button>
+        <button class="seg-btn" data-rango="range">Rango</button>
+      </div>
+
+      <div class="sub-control" id="yearSubCtrl" hidden>
+        <div class="segmented" id="yearCtrl"></div>
+      </div>
+
+      <div class="sub-control" id="rangeSubCtrl" hidden>
+        <div class="range-inputs">
+          <div>
+            <span class="range-lbl">Desde</span>
+            <select id="rangeFrom"></select>
+          </div>
+          <div>
+            <span class="range-lbl">Hasta</span>
+            <select id="rangeTo"></select>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -71,13 +100,64 @@
     </table>
   </div>
   <p class="footnote">
-    Montos en <b>millones de COP</b>. Ticket Promedio en <b>COP absolutos</b>. Cantidad Desembolsos en unidades.<br>
-    Fuente: query oficial cross-project (<code>papyrus-master</code> + <code>papyrus-delivery-data</code>) con tablas espejo <code>cs_tarifa_comisiones_habicredit</code> y <code>cs_comisiones_internas_hc_finanzas</code>.<br>
+    Montos en <b>millones de COP</b>. Ticket Promedio también en <b>millones de COP</b>. Cantidad Desembolsos en unidades.<br>
+    <b>Fuentes:</b> Cantidad y Valor Desembolsado provienen de <code>mart_habicredit</code> (asignación exacta por NID con ciudad derivada de <code>dim_brokers</code>).
+    Comisión Recibida, Pagada Externos e Internos provienen del <code>bet_data_p2</code> (fuente contable oficial P&amp;L, ancla en fecha del bill).<br>
+    <b>Supuesto de distribución por ciudad:</b> el BET solo tiene granularidad país. Las comisiones se distribuyen por ciudad aplicando el <i>share de valor desembolsado del mes</i>
+    (<code>share_ciudad = valor_desembolsado_ciudad / valor_desembolsado_total_mes</code>). Es un supuesto: asume que la mezcla de comisiones sigue la misma proporción
+    que los desembolsos por ciudad.<br>
+    <b>Las comisiones pagadas (Externos e Internos) se muestran con signo negativo y color rojo</b> para reflejar que se restan de la Comisión Recibida al calcular el Margen de Contribución.<br>
     El <b>Total</b> es la suma de las ciudades reales; Ticket Promedio del Total se recalcula = valor_total / cantidad_total.<br>
-    <span class="mtd-note">El mes en curso aparece con el sufijo <b>· MTD</b>.</span>
+    <span class="mtd-note"><b>Mes en curso (MTD)</b>: se muestran solo Cantidad, Valor Desembolsado y Ticket Promedio (datos operativos reales).
+    Las comisiones aparecen como <b>—</b> porque el BET del mes en curso está incompleto por el ciclo T+1 (los bills se emiten el mes siguiente al desembolso).</span>
   </p>
 </main>
+</section>
 
-<script src="js/app.js?v=2026-08-11-ciudad"></script>
+<!-- ============================================================ TAB COMP == -->
+<section id="tab-comparativa" class="tab-panel" hidden>
+<main class="tabla-wrap">
+  <div class="controls">
+    <div class="control-group">
+      <label>Período</label>
+      <div class="segmented" id="cmpPeriodoCtrl">
+        <button class="seg-btn" data-periodo="3m">Últimos 3</button>
+        <button class="seg-btn active" data-periodo="6m">Últimos 6</button>
+        <button class="seg-btn" data-periodo="12m">Últimos 12</button>
+        <button class="seg-btn" data-periodo="ytd">YTD</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Regiones a comparar</label>
+      <div class="segmented wrap" id="cmpRegionCtrl"></div>
+    </div>
+    <div class="control-group">
+      <label>Métrica</label>
+      <div class="segmented" id="cmpMetricaCtrl">
+        <button class="seg-btn active" data-metrica="abs">Absoluto</button>
+        <button class="seg-btn" data-metrica="pct">% del Ingreso</button>
+        <button class="seg-btn" data-metrica="per_nid">Por Desembolso</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cmp-context" id="cmpContext"></div>
+
+  <div class="tabla-scroll">
+    <table id="cmpTable">
+      <thead><tr id="cmpHead"></tr></thead>
+      <tbody id="cmpBody"></tbody>
+    </table>
+  </div>
+  <p class="footnote">
+    Suma consolidada del período seleccionado por región (excluye MTD por T+1 incompleto).<br>
+    <b>Absoluto</b>: millones de COP. <b>% del Ingreso</b>: normalizado sobre Comisión Recibida de la región.
+    <b>Por Desembolso</b>: cada monto dividido entre la cantidad de desembolsos del período.<br>
+    Comisiones pagadas (Externos e Internos) se muestran con <b>signo negativo y color rojo</b> para reforzar que se restan del ingreso.
+  </p>
+</main>
+</section>
+
+<script src="js/app.js?v=2026-08-11-cmp"></script>
 </body>
 </html>

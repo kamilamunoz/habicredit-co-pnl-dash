@@ -107,12 +107,31 @@ code, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 
 /* ─── controls ─── */
 .tabla-wrap { padding: 24px 32px 60px; max-width: 1600px; margin: 0 auto; }
-.controls { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 18px; }
-.control-group { display: flex; align-items: center; gap: 10px; }
+.controls { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; margin-bottom: 18px; }
+.control-group { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .control-group label {
   color: var(--muted); font-size: 11px; letter-spacing: 0.14em;
   text-transform: uppercase; font-weight: 600;
 }
+.sub-control { margin-top: 4px; }
+.sub-control[hidden] { display: none !important; }
+.range-inputs {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--panel); border: 1px solid var(--border);
+  padding: 8px 12px; border-radius: 8px;
+}
+.range-inputs > div { display: flex; flex-direction: column; gap: 4px; }
+.range-lbl {
+  color: var(--muted); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; font-weight: 600;
+}
+.range-inputs select {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; background: var(--panel-2);
+  border: 1px solid var(--border); color: var(--text-strong);
+  padding: 5px 8px; border-radius: 6px; outline: none;
+}
+.range-inputs select:focus { border-color: var(--habi); }
 .segmented { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
 .seg-btn {
   background: transparent; border: none; color: var(--muted);
@@ -194,6 +213,74 @@ tbody td.placeholder {
   color: var(--muted);
   font-style: italic;
 }
+
+/* % del ingreso — segunda línea debajo del monto */
+tbody tr td .pct {
+  color: #4a5568; font-size: 11px; font-weight: 500;
+  display: block; margin-top: 2px; letter-spacing: 0.02em;
+}
+tbody tr.subtotal td .pct,
+tbody tr.margen-neto td .pct {
+  color: rgba(255, 255, 255, 0.85); font-weight: 600;
+}
+
+/* Negativos — comisiones pagadas se restan del revenue */
+tbody td.neg { color: #c53030; font-weight: 600; }
+tbody td.neg .pct { color: #e07373; }
+
+/* ─── tabs ─── */
+.tabs {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 0 32px; position: sticky; top: 0; z-index: 10;
+}
+.tabs-inner {
+  max-width: 1600px; margin: 0 auto;
+  display: flex; gap: 4px;
+}
+.tab-btn {
+  background: transparent; border: none; color: var(--muted);
+  padding: 14px 20px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text-strong); }
+.tab-btn.active {
+  color: var(--habi-dark); font-weight: 600;
+  border-bottom-color: var(--habi);
+}
+.tab-panel[hidden] { display: none; }
+
+/* ─── tabla comparativa ─── */
+.cmp-context {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
+  font-size: 12px; color: var(--muted);
+}
+.cmp-context b { color: var(--text-strong); font-weight: 600; }
+#cmpTable thead th {
+  background: var(--panel-2); color: var(--muted);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  text-align: right; font-weight: 600;
+}
+#cmpTable thead th:first-child { text-align: left; }
+#cmpTable tbody td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+#cmpTable tbody td:first-child {
+  text-align: left; font-weight: 500; color: var(--text-strong);
+}
+#cmpTable tbody tr.subtotal td {
+  background: var(--subtotal-bg); color: #fff; font-weight: 700;
+}
+#cmpTable tbody tr.margen-neto td {
+  background: var(--subtotal-bg-dark); font-size: 14px;
+}
+#cmpTable tbody td.neg { color: #c53030; font-weight: 600; }
+#cmpTable tbody tr.subtotal td.neg,
+#cmpTable tbody tr.margen-neto td.neg { color: #ffb3b3; }
 
 /* MTD column highlight */
 thead th.mtd::after { content: " · MTD"; color: var(--habi); }

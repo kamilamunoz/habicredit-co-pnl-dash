@@ -70,7 +70,11 @@ WITH ciudad_broker AS (
     LOWER(TRIM(COALESCE(v.correo_habi, v.correo_personal))) AS correo_del_broker,
     CASE
       WHEN v.ciudad IS NULL THEN 'Bogotá'
+      -- Códigos numéricos sin traducir en dim_brokers (confirmados con BI HabiCredit 2026-09-01):
       WHEN CAST(v.ciudad AS STRING) = '1' THEN 'Bogotá'
+      WHEN CAST(v.ciudad AS STRING) = '2' THEN 'Valle de Aburrá'
+      WHEN CAST(v.ciudad AS STRING) = '3' THEN 'Cali'
+      WHEN CAST(v.ciudad AS STRING) = '4' THEN 'Otros'
       WHEN v.ciudad = 'Medellín' THEN 'Valle de Aburrá'
       WHEN v.ciudad = 'Ibagué' THEN 'Otros'
       WHEN v.ciudad = 'Bogotá D.C.' THEN 'Bogotá'

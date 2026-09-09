@@ -16,7 +16,7 @@
 //             ticket_promedio, que se muestra en COP absolutos con separador
 //             de miles y sin decimales.
 
-const PASSWORD = 'p&L_HbC*C0l*C12d4d';
+const PASSWORD = 'p+L_HbC*C0l*C12d4d';
 const STORAGE_KEY = 'habicredit-co-pnl-auth';
 
 const state = {

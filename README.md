@@ -9,7 +9,7 @@ Réplica en la línea de `co-city-pnl-dash`. Sitio estático (HTML + CSS + vanil
 - **Local**: http://localhost:8004/site/
 
 ## Password
-Password del gate del login: `p+L_HbC*C0l*C12d4d` (definida en `site/js/app.js`, constante `PASSWORD`).
+Password del gate del login: `reporte_fincorp_1` (definida en `site/js/app.js`, constante `PASSWORD`).
 
 ## Fuente de datos
 

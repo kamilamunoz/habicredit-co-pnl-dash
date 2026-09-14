@@ -55,6 +55,10 @@ CIUDAD_NORMALIZE = {
     "Bogotá D.C.": "Bogotá",
     "bogotá d.c.": "Bogotá",
     "BOGOTÁ D.C.": "Bogotá",
+    # Cartagena y Costa Caribe se agrupan con Barranquilla (sin sede propia).
+    "Cartagena": "Barranquilla",
+    "cartagena": "Barranquilla",
+    "CARTAGENA": "Barranquilla",
 }
 
 # Basura conocida en el campo `ciudad` de dim_brokers (valores literales '1','2','3'

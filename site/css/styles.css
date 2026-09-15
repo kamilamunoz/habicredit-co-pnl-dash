@@ -285,6 +285,23 @@ tbody td.neg .pct { color: #e07373; }
 /* MTD column highlight */
 thead th.mtd::after { content: " · MTD"; color: var(--habi); }
 
+/* ─── callout de supuesto de prorrateo ─── */
+.callout-prorrateo {
+  background: #fff7ed;
+  border-left: 3px solid var(--warn);
+  color: #6b4b00;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 6px 0 14px;
+}
+.callout-prorrateo b { color: #4a3400; }
+.callout-prorrateo code {
+  background: rgba(180, 83, 9, 0.10);
+  padding: 1px 5px; border-radius: 4px;
+}
+
 /* ─── footnote ─── */
 .footnote {
   color: var(--muted); font-size: 12px; margin-top: 14px;

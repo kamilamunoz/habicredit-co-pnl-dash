@@ -93,6 +93,13 @@
     </div>
   </div>
 
+  <div class="callout-prorrateo">
+    <b>⚠ Comisiones prorrateadas por ciudad.</b> El BET solo tiene granularidad país, así que las 3 líneas de comisión
+    (Recibida, Externos, Internos) se distribuyen aplicando <code>share_ciudad = valor_desembolsado_ciudad / valor_desembolsado_total_mes</code>.
+    Consecuencia: los ratios <i>ext/recibida</i>, <i>int/recibida</i> y <i>recibida/desembolsado</i> son <b>idénticos entre ciudades</b> —
+    no reflejan diferencias reales de rentabilidad entre regiones. Solo Cantidad y Valor Desembolsado son asignación NID-level (vía broker gestor).
+  </div>
+
   <div class="tabla-scroll">
     <table id="pnlTable">
       <thead><tr id="pnlHead"></tr></thead>
@@ -142,6 +149,13 @@
   </div>
 
   <div class="cmp-context" id="cmpContext"></div>
+
+  <div class="callout-prorrateo">
+    <b>⚠ Comisiones prorrateadas por ciudad.</b> El BET solo tiene granularidad país; las 3 comisiones (Recibida, Externos, Internos)
+    se distribuyen aplicando <code>share_ciudad = valor_desembolsado_ciudad / valor_desembolsado_total_mes</code>.
+    Por eso los ratios <i>ext/recibida</i>, <i>int/recibida</i> y <i>recibida/desembolsado</i> son <b>idénticos entre ciudades</b>.
+    Comparaciones válidas: Cantidad y Valor Desembolsado (NID-level real).
+  </div>
 
   <div class="tabla-scroll">
     <table id="cmpTable">
